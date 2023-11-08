@@ -1,6 +1,9 @@
 import pandas 
 import numpy
 import ast
+from sklearn.feature_extraction.text import CountVectorizer
+from nltk.stem.porter import PorterStemmer
+from sklearn.metrics.pairwise import cosine_similarity
 
 movies = pandas.read_csv("tmdb_5000_movies.csv")
 credits = pandas.read_csv("tmdb_5000_credits.csv")
@@ -88,7 +91,65 @@ def convert_overview(obj):
 # print(movies_cleaned.overview[0].split())
 movies_cleaned.overview = movies_cleaned["overview"].apply(lambda x: x.split())
 
-# Continue from 49th minute 
+# Replace spaces 
+movies_cleaned.genres = movies_cleaned["genres"].apply(lambda x: [i.replace(" ", "") for i in x]) 
+movies_cleaned.keywords = movies_cleaned["keywords"].apply(lambda x: [i.replace(" ", "") for i in x]) 
+movies_cleaned.cast = movies_cleaned["cast"].apply(lambda x: [i.replace(" ", "") for i in x]) 
+movies_cleaned.crew = movies_cleaned["crew"].apply(lambda x: [i.replace(" ", "") for i in x]) 
+
+movies_cleaned["tags"] = movies_cleaned.overview + movies_cleaned.genres + movies_cleaned.keywords + movies_cleaned.cast + movies_cleaned.crew
+
+new_df = movies_cleaned[["movie_id", "title", "tags"]]
+
+# convert tag list into string 
+new_df.tags = new_df.tags.apply(lambda x: " ".join(x)) 
+
+# Convert all tags letters to lower case 
+new_df.tags = new_df["tags"].apply(lambda x: x.lower())
+
+# Vectorize the data using bag of words method 
+cv = CountVectorizer(max_features=5000, stop_words='english')
+vectors = cv.fit_transform(new_df["tags"]).toarray().shape
+
+# print(cv.get_feature_names_out())
+
+# Stemming 
+ps = PorterStemmer()
+
+def stem_text(text):
+    y = []
+    for i in text.split():
+        y.append(ps.stem(i))
+    return " ".join(y)
+# print(new_df["tags"].apply(stem_text))
+new_df["tags"] = new_df.tags.apply(stem_text)
+# print(new_df["tags"][0])
+
+# Second vectorization 
+cv2 = CountVectorizer(max_features=5000, stop_words='english')
+vectors2 = cv2.fit_transform(new_df["tags"]).toarray()
+
+# print(cv2.get_feature_names_out()) 
+# calculate cosine distance of each movie from the other one 
+# print(cosine_similarity(vectors2))
+# print(cosine_similarity(vectors2).shape)
+similarity = cosine_similarity(vectors2)
+
+# Writing a recommend function that gives a 5 movies based on similarity  
+# print(new_df[new_df["title"] == "Batman Begins"].index[0])
+# print(sorted(list(enumerate(similarity[0])), reverse = True, key = lambda x: x[1])[1:6])
+def recommend(movie):
+    # Access the movie index 
+    movie_index = new_df[new_df["title"] == movie].index[0]
+    distances = similarity[movie_index]
+    movies_list = sorted(list(enumerate(distances)), reverse = True, key = lambda x: x[1])[1:6]
+
+    for i in movies_list:
+        print(new_df.iloc[i[0]].title)
+recommend('Batman Begins')
+
+
+
 
 
 
